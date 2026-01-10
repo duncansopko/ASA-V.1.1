@@ -421,28 +421,183 @@ def application_state_view():
     return rows
 
 # ==================================================
+# Pillar D.1 — Application-Level Narratives
+# ==================================================
+
+# ----------------------
+# D.1.1 — Phrase Templates
+# ----------------------
+
+APPLICATION_STATE_TEMPLATES = {
+    "unengaged": {
+        "base": "This application has been submitted, but no outreach has been logged yet.",
+        "flags": {},
+    },
+    "engaged_idle": {
+        "base": "Outreach has occurred, but there has been no recent activity on this application.",
+        "flags": {
+            "responded_flag": "A response was received earlier.",
+            "slow_response_flag": "Responses on this application arrived more slowly than typical.",
+        },
+    },
+    "active": {
+        "base": "This application has ongoing outreach activity.",
+        "flags": {},
+    },
+    "closed": {
+        "base": "This application is marked as closed.",
+        "flags": {},
+    },
+}
+
+TRANSITION_TEMPLATES = {
+    "reactivated_flag": "This application was recently reactivated after a period of inactivity.",
+    "stagnation_flag": "This application has remained inactive for an extended period.",
+}
+
+# ----------------------
+# D.1.2 — Eligibility Logic
+# ----------------------
+
+def _eligible_application_templates(application_state, flags):
+    """
+    Determines which narrative templates are eligible.
+    Returns:
+      base_sentence (str)
+      optional_sentences (list[str])
+    """
+
+    state_block = APPLICATION_STATE_TEMPLATES.get(application_state)
+
+    if state_block is None:
+        return None, []
+
+    base_sentence = state_block["base"]
+    optional_sentences = []
+
+    # Closed state suppression
+    if application_state == "closed":
+        return base_sentence, []
+
+    # State-level flag templates
+    for flag_name, sentence in state_block.get("flags", {}).items():
+        if flags.get(flag_name) is True:
+            optional_sentences.append(sentence)
+
+    # Transition templates (added later with priority)
+    for flag_name, sentence in TRANSITION_TEMPLATES.items():
+        if flags.get(flag_name) is True:
+            optional_sentences.append(sentence)
+
+    return base_sentence, optional_sentences
+
+# ----------------------
+# D.1.3 — Assembly Rules
+# ----------------------
+
+def _assemble_application_narrative(application_state, flags):
+    """
+    Assembles up to 2 sentences:
+      - Required base sentence
+      - Optional secondary sentence (flag or transition)
+    """
+
+    base_sentence, optional_sentences = _eligible_application_templates(
+        application_state,
+        flags,
+    )
+
+    if base_sentence is None:
+        return []
+
+    if not optional_sentences:
+        return [base_sentence]
+
+    # Prefer transition-based templates
+    transition_sentences = [
+        s for s in optional_sentences
+        if s in TRANSITION_TEMPLATES.values()
+    ]
+
+    if transition_sentences:
+        chosen_optional = transition_sentences[-1]
+    else:
+        chosen_optional = optional_sentences[-1]
+
+    return [base_sentence, chosen_optional]
+
+# ----------------------
+# D.1 — Public Interface
+# ----------------------
+
+def describe_application(
+    *,
+    application_state,
+    no_follow_up_flag=False,
+    responded_flag=False,
+    slow_response_flag=False,
+    reactivated_flag=False,
+    stagnation_flag=False,
+):
+    """
+    Returns a list of 1–2 neutral, descriptive sentences
+    describing the current application state.
+    """
+
+    flags = {
+        "no_follow_up_flag": no_follow_up_flag,
+        "responded_flag": responded_flag,
+        "slow_response_flag": slow_response_flag,
+        "reactivated_flag": reactivated_flag,
+        "stagnation_flag": stagnation_flag,
+    }
+
+    return _assemble_application_narrative(application_state, flags)
+
+
+# ==================================================
 # Test Runner
 # ==================================================
 
 if __name__ == "__main__":
+
     print("\n=== APPLICATION METRICS ===")
-    for r in application_metrics_view():
+    app_metrics = application_metrics_view()
+    for r in app_metrics:
         print(r)
 
     print("\n=== APPLICATION STATES ===")
-    for r in application_state_view():
+    app_states = application_state_view()
+    for r in app_states:
         print(r["application_id"], r["application_state"])
 
+    print("\n=== APPLICATION NARRATIVES (PILLAR D.1) ===")
+    for r in app_metrics:
+        narrative = describe_application(
+            application_state=application_state(r),
+            no_follow_up_flag=r["has_no_follow_up"],
+            responded_flag=False,
+            slow_response_flag=False,
+            reactivated_flag=False,
+            stagnation_flag=False,
+        )
+
+        print(f"Application {r['application_id']}:")
+        for sentence in narrative:
+            print("  -", sentence)
+
     print("\n=== CHANNEL METRICS ===")
-    for r in channel_metrics_view():
+    channel_rows = channel_metrics_view()
+    for r in channel_rows:
         print(r)
 
     print("\n=== CHANNEL SIGNAL STATES ===")
-    for r in channel_signal_state_view():
+    channel_states = channel_signal_state_view()
+    for r in channel_states:
         print(
             r["channel_name"],
             r["channel_signal_state"],
-            r["channel_flags"]
+            r["channel_flags"],
         )
 
     print("\n=== PORTFOLIO METRICS ===")
@@ -451,10 +606,13 @@ if __name__ == "__main__":
 
     print("\n=== PORTFOLIO PATTERN ===")
     pp = portfolio_pattern_view()
-    print(pp["portfolio_pattern"], {
-        "high_idle": pp["high_idle_portfolio"],
-        "low_follow_up": pp["low_follow_up_portfolio"],
-        "channel_dependency": pp["channel_dependency_flag"],
-        "low_signal_environment": pp["low_signal_environment_flag"],
-    })
+    print(
+        pp["portfolio_pattern"],
+        {
+            "high_idle": pp["high_idle_portfolio"],
+            "low_follow_up": pp["low_follow_up_portfolio"],
+            "channel_dependency": pp["channel_dependency_flag"],
+            "low_signal_environment": pp["low_signal_environment_flag"],
+        },
+    )
 
