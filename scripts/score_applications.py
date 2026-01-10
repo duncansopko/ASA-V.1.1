@@ -497,6 +497,100 @@ def describe_portfolio(portfolio_row):
 
     return _assemble_portfolio_summary(portfolio_row)
 
+# ==================================================
+# Pillar D.4 — Global Orchestration & Suppression
+# ==================================================
+
+# ----------------------
+# D.4.1 — Display Limits
+# ----------------------
+
+MAX_APPLICATIONS_DISPLAYED = 5
+MAX_APPLICATION_SENTENCES = 2
+MAX_CHANNEL_SENTENCES = 1
+MAX_PORTFOLIO_SENTENCES = 3
+
+# ----------------------
+# D.4.2 — Cross-Level Suppression Rules
+# ----------------------
+
+def _filter_active_applications(application_rows):
+    """
+    Closed applications may not surface alongside active ones.
+    """
+    active = [r for r in application_rows if r.get("application_state") != "closed"]
+    return active if active else application_rows
+
+
+def _filter_low_signal_channels(channel_rows):
+    """
+    Channels with no_signal or insufficient_data may be hidden
+    unless explicitly requested.
+    """
+    return [
+        r for r in channel_rows
+        if r.get("channel_signal_state") not in {"no_signal", "insufficient_data"}
+    ]
+
+
+# ----------------------
+# D.4.3 — Assembly Engine
+# ----------------------
+
+def assemble_insight_bundle(
+    *,
+    application_rows,
+    channel_rows,
+    portfolio_row,
+    include_channels=True,
+):
+    """
+    Orchestrates D.1, D.2, and D.3 outputs into a single,
+    human-readable insight bundle with strict suppression.
+    """
+
+    bundle = {
+        "applications": [],
+        "channels": [],
+        "portfolio": [],
+    }
+
+    # ---- Portfolio takes precedence ----
+    portfolio_sentences = describe_portfolio(portfolio_row)
+    bundle["portfolio"] = portfolio_sentences[:MAX_PORTFOLIO_SENTENCES]
+
+    # ---- Application-level insights ----
+    filtered_apps = _filter_active_applications(application_rows)
+
+    for r in filtered_apps[:MAX_APPLICATIONS_DISPLAYED]:
+        narrative = describe_application(
+            application_state=r.get("application_state"),
+            no_follow_up_flag=r.get("has_no_follow_up", False),
+            responded_flag=r.get("responded_flag", False),
+            slow_response_flag=r.get("slow_response_flag", False),
+            reactivated_flag=r.get("reactivated_flag", False),
+            stagnation_flag=r.get("stagnation_flag", False),
+        )
+
+        if narrative:
+            bundle["applications"].append({
+                "application_id": r.get("application_id"),
+                "sentences": narrative[:MAX_APPLICATION_SENTENCES],
+            })
+
+    # ---- Channel-level insights ----
+    if include_channels:
+        filtered_channels = _filter_low_signal_channels(channel_rows)
+
+        for r in filtered_channels:
+            summary = describe_channel(r)
+            if summary:
+                bundle["channels"].append({
+                    "channel_name": r.get("channel_name"),
+                    "sentences": summary[:MAX_CHANNEL_SENTENCES],
+                })
+
+    return bundle
 
 # ==================================================
 # Pillar C.3 — Portfolio Pattern
@@ -836,4 +930,33 @@ summary = describe_portfolio(portfolio_row)
 
 for sentence in summary:
     print("  -", sentence)
+
+print("\n=== INSIGHT BUNDLE (PILLAR D.4) ===")
+
+# Prepare inputs
+app_rows = application_state_view()
+channel_rows = channel_signal_state_view()
+portfolio_row = portfolio_pattern_view()
+
+bundle = assemble_insight_bundle(
+    application_rows=app_rows,
+    channel_rows=channel_rows,
+    portfolio_row=portfolio_row,
+)
+
+print("\nPORTFOLIO:")
+for s in bundle["portfolio"]:
+    print("  -", s)
+
+print("\nAPPLICATIONS:")
+for app in bundle["applications"]:
+    print(f"  Application {app['application_id']}:")
+    for s in app["sentences"]:
+        print("    -", s)
+
+print("\nCHANNELS:")
+for ch in bundle["channels"]:
+    print(f"  {ch['channel_name']}:")
+    for s in ch["sentences"]:
+        print("    -", s)
 
