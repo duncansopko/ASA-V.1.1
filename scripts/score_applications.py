@@ -292,6 +292,213 @@ def channel_signal_state_view():
     return rows
 
 # ==================================================
+# Pillar D.2 — Channel-Level Summaries
+# ==================================================
+
+# ----------------------
+# D.2.1 — Phrase Templates
+# ----------------------
+
+CHANNEL_SIGNAL_TEMPLATES = {
+    "no_signal": "This channel has not produced any responses yet.",
+    "insufficient_data": "This channel has produced some responses, but there is not yet enough data to interpret patterns.",
+    "emerging_signal": "This channel is beginning to show response patterns, though the signal is still forming.",
+    "stable_signal": "This channel has produced enough activity to support reliable pattern observation.",
+}
+
+CHANNEL_FLAG_TEMPLATES = {
+    "fast_response_flag": "Responses on this channel tend to arrive relatively quickly.",
+    "slow_response_flag": "Responses on this channel tend to arrive more slowly.",
+    "volatile_response_rate_flag": "Response patterns on this channel have been variable over time.",
+}
+
+# ----------------------
+# D.2.2 — Eligibility Logic
+# ----------------------
+
+def _eligible_channel_sentences(channel_row):
+    """
+    Determines eligible sentences for a channel summary.
+    Returns:
+      base_sentence (str)
+      optional_sentences (list[str])
+    """
+
+    state = channel_row.get("channel_signal_state")
+    flags = channel_row
+
+    base_sentence = CHANNEL_SIGNAL_TEMPLATES.get(state)
+    optional_sentences = []
+
+    # Safety fallback
+    if base_sentence is None:
+        return None, []
+
+    # Low-signal suppression
+    if state in {"no_signal", "insufficient_data"}:
+        return base_sentence, []
+
+    # Response existence suppression
+    if flags.get("no_response_flag"):
+        return base_sentence, []
+
+    # Collect eligible flag sentences
+    for flag_name, sentence in CHANNEL_FLAG_TEMPLATES.items():
+        if flags.get(flag_name) is True:
+            optional_sentences.append(sentence)
+
+    return base_sentence, optional_sentences
+
+# ----------------------
+# D.2.3 — Assembly Rules
+# ----------------------
+
+def _assemble_channel_summary(channel_row):
+    """
+    Assembles up to 2 sentences:
+      - Required primary signal sentence
+      - Optional single descriptive modifier
+    """
+
+    base_sentence, optional_sentences = _eligible_channel_sentences(channel_row)
+
+    if base_sentence is None:
+        return []
+
+    if not optional_sentences:
+        return [base_sentence]
+
+    # Truncation priority:
+    # 1) volatile_response_rate_flag
+    # 2) fast_response_flag / slow_response_flag
+    priority_order = [
+        CHANNEL_FLAG_TEMPLATES.get("volatile_response_rate_flag"),
+        CHANNEL_FLAG_TEMPLATES.get("fast_response_flag"),
+        CHANNEL_FLAG_TEMPLATES.get("slow_response_flag"),
+    ]
+
+    for preferred in priority_order:
+        if preferred in optional_sentences:
+            return [base_sentence, preferred]
+
+    # Fallback (should rarely trigger)
+    return [base_sentence, optional_sentences[0]]
+
+# ----------------------
+# D.2 — Public Interface
+# ----------------------
+
+def describe_channel(channel_row):
+    """
+    Returns a list of 1–2 neutral, descriptive sentences
+    summarizing the channel's current signal characteristics.
+    """
+
+    return _assemble_channel_summary(channel_row)
+
+# ==================================================
+# Pillar D.3 — Portfolio-Level Insights
+# ==================================================
+
+# ----------------------
+# D.3.1 — Phrase Templates
+# ----------------------
+
+PORTFOLIO_PATTERN_TEMPLATES = {
+    "inactive": "Overall activity across applications has been limited recently.",
+    "unstructured_bursting": "Applications are being submitted, but engagement across them has been uneven.",
+    "steady_engagement": "Applications are being submitted and engaged with consistently.",
+    "overconcentrated_effort": "A small number of applications are receiving a large share of overall effort.",
+    "stalled": "Earlier activity occurred, but many applications have since become inactive.",
+}
+
+PORTFOLIO_FLAG_TEMPLATES = {
+    "low_follow_up_portfolio_flag": "Follow-up activity has been limited across applications.",
+    "high_idle_portfolio_flag": "A sizable portion of applications have not been touched recently.",
+    "channel_dependency_flag": "Most responses have come from a single outreach channel.",
+    "low_signal_environment_flag": "Across channels, response signals remain limited.",
+}
+
+# ----------------------
+# D.3.2 — Eligibility Logic
+# ----------------------
+
+def _eligible_portfolio_sentences(portfolio_row):
+    """
+    Determines eligible portfolio-level sentences.
+    Returns:
+      primary_sentence (str)
+      secondary_sentences (list[str])
+    """
+
+    pattern = portfolio_row.get("portfolio_pattern")
+    primary_sentence = PORTFOLIO_PATTERN_TEMPLATES.get(pattern)
+
+    if primary_sentence is None:
+        return None, []
+
+    secondary_sentences = []
+
+    # Collect eligible secondary flags
+    for flag_name, sentence in PORTFOLIO_FLAG_TEMPLATES.items():
+        if portfolio_row.get(flag_name) is True:
+            secondary_sentences.append((flag_name, sentence))
+
+    # Redundancy suppression
+    if pattern == "stalled":
+        secondary_sentences = [
+            (f, s) for (f, s) in secondary_sentences
+            if f != "high_idle_portfolio_flag"
+        ]
+
+    return primary_sentence, secondary_sentences
+
+# ----------------------
+# D.3.3 — Assembly Rules
+# ----------------------
+
+def _assemble_portfolio_summary(portfolio_row):
+    """
+    Assembles up to 3 sentences:
+      - 1 required primary pattern sentence
+      - Up to 2 secondary flag sentences
+    """
+
+    primary_sentence, secondary_sentences = _eligible_portfolio_sentences(portfolio_row)
+
+    if primary_sentence is None:
+        return []
+
+    # Truncation priority (highest first)
+    priority_order = [
+        "channel_dependency_flag",
+        "low_follow_up_portfolio_flag",
+        "high_idle_portfolio_flag",
+        "low_signal_environment_flag",
+    ]
+
+    ordered_secondary = []
+    for flag in priority_order:
+        for f, sentence in secondary_sentences:
+            if f == flag:
+                ordered_secondary.append(sentence)
+
+    return [primary_sentence] + ordered_secondary[:2]
+
+# ----------------------
+# D.3 — Public Interface
+# ----------------------
+
+def describe_portfolio(portfolio_row):
+    """
+    Returns 1–3 neutral, descriptive sentences
+    summarizing overall portfolio posture.
+    """
+
+    return _assemble_portfolio_summary(portfolio_row)
+
+
+# ==================================================
 # Pillar C.3 — Portfolio Pattern
 # ==================================================
 
@@ -615,4 +822,18 @@ if __name__ == "__main__":
             "low_signal_environment": pp["low_signal_environment_flag"],
         },
     )
+
+print("\n=== CHANNEL SUMMARIES (PILLAR D.2) ===")
+for r in channel_signal_state_view():
+    summary = describe_channel(r)
+    print(r["channel_name"] + ":")
+    for sentence in summary:
+        print("  -", sentence)
+
+print("\n=== PORTFOLIO INSIGHTS (PILLAR D.3) ===")
+portfolio_row = portfolio_pattern_view()
+summary = describe_portfolio(portfolio_row)
+
+for sentence in summary:
+    print("  -", sentence)
 
