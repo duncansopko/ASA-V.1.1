@@ -723,6 +723,29 @@ def describe_application(
 
     return _assemble_application_narrative(application_state, flags)
 
+# --------------------------------------------------
+# D.1.4 — Public Interface
+# --------------------------------------------------
+
+def application_narratives_view():
+    """
+    Returns application_id → list of narrative sentences
+    """
+    rows = application_state_view()
+
+    narratives = {}
+
+    for r in rows:
+        application_id = r["application_id"]
+        application_state = r["application_state"]
+        flags = r.get("flags", {})
+
+        narratives[application_id] = _assemble_application_narrative(
+            application_state,
+            flags,
+        )
+
+    return narratives
 
 # ==================================================
 # D.2 — Channel-Level Summaries
@@ -909,8 +932,79 @@ def describe_portfolio(portfolio_row):
     Returns 1–3 neutral, descriptive sentences
     summarizing overall portfolio posture.
     """
+    if not portfolio_row:
+        return []
 
-    return _assemble_portfolio_summary(portfolio_row)
+    summary = _assemble_portfolio_summary(portfolio_row)
+
+    if isinstance(summary, list):
+        return summary
+
+    return [summary]
+
+def get_application_base(application_id):
+    """
+    Returns base application identity data.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT company, role, application_link
+        FROM applications
+        WHERE application_id = ?
+        """,
+        (application_id,),
+    )
+
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "company": row[0],
+        "role": row[1],
+        "application_link": row[2],
+    }
+
+
+def get_application_snapshot(application_id):
+    """
+    Public read-only snapshot for CLI / UI layers.
+    Combines identity, metrics, state, and narratives.
+    """
+
+    # --- base identity ---
+    base = get_application_base(application_id)
+
+    # --- analytics views ---
+    metrics_rows = application_metrics_view()
+    state_rows = application_state_view()
+    narratives = application_narratives_view()
+
+    metrics = {
+        r["application_id"]: r
+        for r in metrics_rows
+    }
+
+    states = {
+        r["application_id"]: r["application_state"]
+        for r in state_rows
+    }
+
+    if not base or application_id not in metrics:
+        return None
+
+    return {
+        "application_id": application_id,
+        "base": base,
+        "state": states.get(application_id),
+        "metrics": metrics.get(application_id),
+        "narratives": narratives.get(application_id, []),
+    }
 
 
 # ==================================================
