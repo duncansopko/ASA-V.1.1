@@ -1,4 +1,4 @@
-# ASA v1.1(A) — Behavioral Application Strategy Analyzer
+# ASA v1.1(A) — Behavioral Job Application Strategy Analyzer
 
 ASA is a lightweight system for **tracking and understanding how you actually run a job search** — not just how many applications you send.
 
