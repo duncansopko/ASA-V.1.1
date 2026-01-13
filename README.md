@@ -1,50 +1,117 @@
-# ASA v1.1 — Application Strategy Analyzer
+# ASA v1.1(A) — Behavioral Application Strategy Analyzer
 
-ASA is a Python + SQLite behavioral analytics engine for job and internship applications.
+ASA is a lightweight system for **tracking and understanding how you actually run a job search** — not just how many applications you send.
 
-This repository contains the first complete implementation of the ASA system, focused on:
-- minimal user input
-- deterministic metrics
-- time-aware behavior tracking
-- restrained, non-judgmental narrative outputs
+It focuses on *behavior over time*: what you apply to, how you follow up, where responses come from, and what patterns emerge across your full search.
 
-## What it does
+This repository contains **v1.1**, the first complete, working version of the ASA system.
 
-ASA ingests three types of events:
-- applications
-- outreach attempts
-- market responses
+---
 
-From these, it computes:
-- application-level states
-- channel-level signal strength
-- portfolio-level behavioral patterns
+## What problem this solves
 
-Outputs are generated as short, neutral insight bundles designed to support reflection and decision-making — not automation or ranking.
+Most job tracking tools answer surface questions:
+- “How many jobs did I apply to?”
+- “What’s the status of this role?”
 
-## Architecture
+ASA answers deeper ones:
+- Which applications am I actually engaging with?
+- Am I following up — or just submitting and moving on?
+- Which outreach channels are producing real responses?
+- Is my search structured, stalled, or fragmented over time?
 
-The system is structured around four pillars:
+Importantly, ASA does **not** coach, judge, or automate decisions.
+It simply reflects what’s happening — clearly and consistently.
 
-- Pillar A — Data ingestion (writes only)
-- Pillar B — Canonical metrics & time awareness
-- Pillar C — Behavioral state classification
-- Pillar D — Narrative assembly with suppression rules
+---
 
-All interpretation is layered on top of immutable metrics.
+## What ASA does (plain English)
 
-## Status
+ASA tracks three simple things:
 
-This is v1.1: a first complete implementation.
+1. **Applications**  
+   When and where you applied.
 
-Planned future work includes:
+2. **Outreach**  
+   Messages, follow-ups, and contact attempts (e.g. LinkedIn, email).
+
+3. **Responses**  
+   Any reply from the market (human response, rejection, interview, etc.).
+
+From this, ASA automatically produces:
+
+- a clear **state for each application** (active, unengaged, idle, closed)
+- **signal strength by outreach channel** (no signal, emerging, stable)
+- a **portfolio-level view** of how your overall search is behaving
+
+All outputs are short, neutral summaries designed to support reflection and better decisions.
+
+---
+
+## Example output
+
+For a single application, ASA might surface:
+
+- “This application has ongoing outreach activity.”
+- “A response has been received for this application.”
+
+At the portfolio level:
+
+- “Applications are being submitted, but engagement across them has been uneven.”
+- “Most responses have come from a single outreach channel.”
+
+No advice. No pressure. Just signal.
+
+---
+
+## How it’s built (high level)
+
+Internally, ASA is structured into four layers:
+
+- **Pillar A — Input**  
+  Records what happened (applications, outreach, responses).  
+  No interpretation.
+
+- **Pillar B — Metrics**  
+  Computes objective counts and time-based measures.
+
+- **Pillar C — State**  
+  Classifies behavioral patterns from metrics.
+
+- **Pillar D — Narratives**  
+  Translates states into restrained, human-readable summaries.
+
+Each layer only depends on the one below it.  
+Metrics are immutable; interpretation is layered on top.
+
+---
+
+## Current status
+
+This is **v1.1**, the first complete end-to-end implementation:
+- working CLI
+- stable data model
+- time-aware metrics
+- application, channel, and portfolio insights
+
+Planned future iterations may include:
 - response latency modeling
 - decay-weighted signals
 - opportunity scoring
-- modularization and CLI tooling
+- expanded CLI views (e.g. “today”, “next”)
 
-## Running
+---
+
+## Running the system
+
+To view the full analytics output:
 
 ```bash
+
 python3 scripts/score_applications.py
+
+To interact with the CLI:
+python3 -m scripts.cli add --company Adobe --role "Sales Velocity Analyst"
+python3 -m scripts.cli outreach --application-id 1 --channel LinkedIn
+python3 -m scripts.cli status --application-id 1
 
