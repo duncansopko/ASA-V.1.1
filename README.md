@@ -1,6 +1,9 @@
 # ASA v1.1(A) — Behavioral Job Application Strategy Analyzer
 
-ASA is a Python + SQLite analytics system designed to track job and internship applications, outreach activity, and responses. It structures unstructured job-search behavior into measurable metrics, states, and signals, with a modular architecture that supports quality scoring and probabilistic outcome modeling over time.
+A Python + SQLite analytics system for informing job-search activity.
+
+
+
 
 ASA is a lightweight system for **tracking and understanding how you actually run a job search** — not just how many applications you send.
 
